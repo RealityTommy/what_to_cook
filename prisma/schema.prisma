@@ -1,11 +1,8 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client-py"
+  provider             = "prisma-client-py"
   recursive_type_depth = -1
 }
 
@@ -16,16 +13,26 @@ datasource db {
 }
 
 model User {
-  id  String @id @default(uuid()) @db.Uuid
+  // Internal unique identifier for the user in this database
+  id String @id @default(uuid()) @db.Uuid
+
+  // Supabase Auth UUID - this links the user in your database 
+  // to their authentication record in Supabase Auth
   uid String @unique @db.Uuid
 
+  // Timestamp for when the user record was created in this database
   created_at DateTime @default(now())
+
+  // Timestamp that updates whenever the user record is modified
   updated_at DateTime @updatedAt
 
+  // User's first name
   first_name String
 
-  email String  @unique
-  name  String?
+  // User's email address, must be unique across all users
+  // This should match the email used in Supabase Auth
+  email String @unique
 
-  admin Boolean @default(false)
+  // Boolean flag to indicate if the user has admin privileges
+  is_admin Boolean @default(false)
 }
