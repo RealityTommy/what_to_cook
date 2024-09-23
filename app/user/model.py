@@ -12,14 +12,3 @@ class UserModel(BaseModel):
     email: str
     # Boolean flag indicating whether the user has admin privileges
     is_admin: bool
-
-    # Configuration class for additional Pydantic settings
-    class Config:
-        # Add an example to the JSON schema
-        json_schema_extra = {
-            "example": {
-                "first_name": "Tommy",
-                "email": "app@tommytruong.dev",
-                "is_admin": False,
-            }
-        }

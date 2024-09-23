@@ -1,6 +1,8 @@
 # Import necessary modules
 from fastapi import APIRouter, HTTPException, Depends
 from prisma import Prisma
+from supabase import create_client, Client
+import os
 
 # Import user model and serialization functions
 from app.user.model import UserModel as User
@@ -9,6 +11,11 @@ from app.user.schema import individual_serial, list_serial
 # Create a router for user-related endpoints
 # This allows us to group and organize our user-related API routes
 router = APIRouter(prefix="/users", tags=["users"])
+
+# Initialize Supabase client
+supabase: Client = create_client(
+    os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_KEY")
+)
 
 
 # Define a dependency to get a Prisma database client
@@ -24,6 +31,35 @@ async def get_prisma():
     finally:
         # Ensure the database connection is closed after the request is processed
         await prisma.disconnect()
+
+
+# Function to create a new user in the database
+async def create_user(auth_id: str, email: str, first_name: str):
+    """
+    Create a new user in the database.
+    This function is called from the auth.py file when a new user signs up.
+    """
+    # Use a context manager to handle database connections
+    async with Prisma() as prisma:
+        try:
+            # Create a new user in the database
+            new_user = await prisma.user.create(
+                data={
+                    "uid": auth_id,  # This is the ID from Supabase Auth
+                    "email": email,
+                    "first_name": first_name,
+                }
+            )
+            # Return the user data
+            return {
+                "id": str(new_user.id),
+                "uid": new_user.uid,
+                "email": new_user.email,
+                "first_name": new_user.first_name,
+            }
+        except Exception as e:
+            # If there's an error (e.g., duplicate email), raise an HTTP exception
+            raise HTTPException(status_code=400, detail=str(e))
 
 
 # Define an endpoint to get all users
@@ -99,6 +135,15 @@ async def delete_user(
     try:
         # Attempt to delete the user from the database
         deleted_user = await prisma.user.delete(where={"uid": user_id})
+
+        # Then, delete the user from Supabase Auth
+        try:
+            supabase.auth.admin.delete_user(deleted_user.uid)
+
+        except Exception as supabase_error:
+            # If Supabase deletion fails, log the error but don't stop the process
+            print(f"Failed to delete user from Supabase Auth: {str(supabase_error)}")
+
         # Return a success message
         return {"message": f"User {deleted_user.uid} has been deleted"}
     except Exception as e:
