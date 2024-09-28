@@ -100,6 +100,12 @@ async def get_user(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+async def get_user_by_email(email: str):
+    async with Prisma() as prisma:
+        user = await prisma.user.find_unique(where={"email": email})
+        return user
+
+
 # Define an endpoint to update a user's information
 @router.put("/{user_id}")
 async def update_user(
@@ -136,16 +142,10 @@ async def delete_user(
         # Attempt to delete the user from the database
         deleted_user = await prisma.user.delete(where={"uid": user_id})
 
-        # Then, delete the user from Supabase Auth
-        try:
-            supabase.auth.admin.delete_user(deleted_user.uid)
-
-        except Exception as supabase_error:
-            # If Supabase deletion fails, log the error but don't stop the process
-            print(f"Failed to delete user from Supabase Auth: {str(supabase_error)}")
-
         # Return a success message
-        return {"message": f"User {deleted_user.uid} has been deleted"}
+        return {
+            "message": f"User {deleted_user.uid} has been deleted. Please delete this user from Supabase Auth as well."
+        }
     except Exception as e:
         # If an error occurs (e.g., user not found), raise a 400 Bad Request exception
         raise HTTPException(status_code=400, detail=str(e))

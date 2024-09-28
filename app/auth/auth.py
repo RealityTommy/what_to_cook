@@ -10,7 +10,7 @@ import os
 from app.auth.model import UserCreate, UserLogin, Token
 
 # Import the create_user function from user.py
-from app.user.user import create_user
+from app.user.user import create_user, get_user_by_email
 
 # Create a router object. This allows us to organize our routes.
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -25,6 +25,37 @@ supabase: Client = create_client(
 # OAuth2 scheme for token authentication
 # This will be used to extract the token from incoming requests
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
+# Helper function to create a user after OAuth sign-in
+async def create_oauth_user(user_data):
+    try:
+        # Check if the user already exists in our database
+        existing_user = await get_user_by_email(user_data.email)
+        if existing_user:
+            return existing_user
+
+        # Extract first name from user metadata
+        full_name = user_data.user_metadata.get("full_name", "")
+        first_name = full_name.split()[0] if full_name else ""
+
+        # If first_name is still empty, try to get it from other fields
+        if not first_name:
+            first_name = user_data.user_metadata.get("name", "").split()[0]
+        if not first_name:
+            first_name = user_data.user_metadata.get("given_name", "")
+
+        # If we still don't have a first name, use a default value
+        if not first_name:
+            first_name = "Joe Schmo"  # Or you could use part of the email address
+
+        # Create a new user
+        new_user = await create_user(
+            auth_id=user_data.id, email=user_data.email, first_name=first_name
+        )
+        return new_user
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to create user: {str(e)}")
 
 
 # Sign-up endpoint
@@ -113,11 +144,31 @@ async def logout(token: str = Depends(oauth2_scheme)):
     """
     Endpoint for user logout.
     It invalidates the provided access token.
+    The token is automatically extracted from the Authorization header by the oauth2_scheme.
     """
     try:
         # Sign out the user using the provided token
         supabase.auth.sign_out(token)
         return {"message": "Successfully logged out"}
+    except Exception as e:
+        # If there's any error during the logout process, return a 400 Bad Request error
+        raise HTTPException(status_code=400, detail=f"Logout failed: {str(e)}")
+
+
+# OAuth callback endpoint
+@router.get("/callback")
+async def oauth_callback(code: str):
+    try:
+        # Exchange the code for a session
+        session = supabase.auth.exchange_code_for_session(code)
+
+        # Get the user data
+        user_data = session.user
+
+        # Create or get the user in our database
+        db_user = await create_oauth_user(user_data)
+
+        return {"message": "Authentication successful", "user": db_user}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
